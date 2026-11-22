@@ -1,193 +1,258 @@
-# Panteen Rent: ระบบเช่าชุดออนไลน์
+# Panteen Rent
 
-เว็บแอปพลิเคชันร้านเช่าชุดผู้หญิง (ชุดรับปริญญา ราตรี ชุดไทย ปาร์ตี้ ไปงานแต่ง) เขียนด้วย **PHP ล้วน + MySQL/MariaDB**
-ไม่ต้องใช้ Composer หรือ framework ใด ๆ วางในโฟลเดอร์ XAMPP แล้วใช้งานได้ทันที
+A dress-rental website for a women's rental shop (graduation, evening, Thai traditional, party and wedding-guest dresses), with a full back office for the staff who run it. Customers pick an event date and see only the dresses that are actually free that day. They choose pickup at the shop, parcel delivery or same-day messenger, and either return at the shop or send the dress back by post. They pay by PromptPay QR and upload a slip, then follow the parcel. They report the condition on arrival and, after the shop inspects the returned dress, see an itemised deposit refund. Written in plain PHP and MySQL/MariaDB with no framework and no Composer, so it runs from a XAMPP `htdocs` folder as-is. The UI is in Thai.
 
-> ข้อมูลในระบบ (ชุด ราคา ลูกค้า การจอง) เป็น **ข้อมูลตัวอย่าง** ทั้งหมด รูปชุดและรูปหน้าเว็บเป็นภาพสัญญาอนุญาต Pexels License (ใช้ฟรี)
-> รายชื่อผู้ถ่ายดูได้ที่หน้า `/credits` (ข้อมูลอยู่ที่ `database/photo-credits.json`) และทุกไฟล์รูปมีที่มาฝังอยู่ในตัวไฟล์
-> (JPEG comment / PNG text: ผู้ถ่าย ลิงก์ต้นฉบับ สัญญาอนุญาต และการตัดแต่ง)
+All data in the app is demo data: the dresses, prices, members, phone numbers and bookings are invented, and every page says so while demo mode is on. Photos are under the Pexels License; the photographers are listed on `/credits`.
+
+![Home page](docs/images/01-home.jpg)
+
+**Full guide (Thai, with screenshots of every screen): [docs/PROJECT-GUIDE.md](docs/PROJECT-GUIDE.md)**
 
 ---
 
-## 1. สิ่งที่ต้องมี
+## Why it exists
 
-| | เวอร์ชันที่ทดสอบแล้ว |
-|---|---|
-| PHP | 8.1 ขึ้นไป (ทดสอบบน 8.5) ต้องเปิด `pdo_mysql`, `mbstring`, `gd` (ย่อรูป), `openssl` (ส่งอีเมล SMTP) |
-| ฐานข้อมูล | MySQL 8/9 หรือ MariaDB 10.4 ขึ้นไป (XAMPP ใช้ MariaDB 10.4) |
-| เว็บเซิร์ฟเวอร์ | Apache + `mod_rewrite` (XAMPP มีให้แล้ว) หรือ `php -S` สำหรับทดลอง |
+A small rental shop runs on LINE chats, a paper calendar and bank-app screenshots. The questions that go wrong are always the same: *is this dress free that weekend, counting the courier and the cleaning day?*, *did this slip really come in?*, *was that tear there before we shipped it?*, *how much of the deposit goes back?* Each of those is a rule in this app, with a test behind it. The shop gets one place where every booking moves through fixed states. Staff see one screen of what to do today, and every baht can be traced back to a slip, a receipt and a line item.
 
-## 2. ติดตั้งบน XAMPP (Windows)
+## Features
 
-1. คัดลอกทั้งโฟลเดอร์ไปไว้ที่ `C:\xampp\htdocs\panteen-rent`
-2. เปิด XAMPP Control Panel แล้วกด Start ที่ **Apache** และ **MySQL**
-3. สร้างฐานข้อมูลพร้อมข้อมูลตัวอย่าง เลือกวิธีใดวิธีหนึ่ง
-   - **วิธีแนะนำ** (วันที่ของการจองตัวอย่างจะนับจากวันนี้) เปิด Command Prompt แล้วพิมพ์
-     ```
-     cd C:\xampp\htdocs\panteen-rent
-     C:\xampp\php\php.exe cli\install.php
-     ```
-   - **ผ่าน phpMyAdmin** เปิด http://localhost/phpmyadmin → แท็บ Import → เลือกไฟล์ `database/panteen_rent.sql` → Go
-     (ไฟล์นี้สร้างฐานข้อมูล `panteen_rent` ให้เอง การจองตัวอย่างในไฟล์อิงวันที่ที่ส่งออกไฟล์ ถ้าต้องการให้วันที่เป็นปัจจุบัน
-     เข้าระบบด้วยบัญชีผู้ดูแลแล้วไปที่ ตั้งค่าร้าน → “รีเซ็ตข้อมูลตัวอย่าง”)
-4. เปิด http://localhost/panteen-rent/
+Read from the code, accurate as of the current `main`.
 
-ระบบตรวจโฟลเดอร์ย่อย (`/panteen-rent`) ให้เองทุกลิงก์ ไม่ต้องตั้งค่าเพิ่ม และ `.htaccess` ส่งทุกคำขอเข้า `public/`
-พร้อมปิดไม่ให้เปิดโฟลเดอร์ `app/ config/ storage/ database/ tests/` จากเว็บได้
+### Customers
 
-### ตั้งค่า (ไม่บังคับ)
+- **Availability by event date.** The search on the home page and the filters on `/dresses` take an event date and mark each dress free or taken for it. The lock window counts outbound transit, the rental days, return transit and a cleaning day (`app/Services/Availability.php`).
+- **Dress page.** Photo gallery, measurements (bust, waist, hip, length) compared with the member's own saved measurements, an availability calendar and a live price quote (`/api/dress/{code}/quote`).
+- **Delivery and return options.** Delivery is pickup, parcel (metro 80 THB / upcountry 120 THB, 1 or 2 transit days, 14:00 cutoff) or messenger (metro only, 250 THB). Return is at the shop or by parcel with a prepaid label packed in the box. The zone comes from the province; the ship-by date comes from transit days and the cutoff (`app/Services/Shipping.php`).
+- **Address book.** Up to 5 addresses with a default. A booking stores a copy of the address, so editing the book never redirects a parcel already booked.
+- **Booking hold and payment.** A booking holds the dress for 24 hours. The PromptPay QR carries the exact amount (EMVCo payload with CRC16, `app/Services/PromptPay.php`). There is a countdown and a slip upload. A member can have at most 3 unpaid holds.
+- **Parcel tracking and arrival report.** Each booking shows the carrier, tracking number and tracking link. The customer confirms receipt and has 24 hours to report the dress's condition with up to 6 photos; anything reported there is never charged at inspection.
+- **Return by post.** The customer enters the carrier, tracking number, drop-off date and a photo of the drop-off receipt. Lateness counts to the postmark date, not to the day the parcel reaches the shop.
+- **Inspection result and dispute.** An itemised damage list with notes and the refunded deposit. The customer can dispute once, within 3 days, with up to 6 photos.
+- **Receipts.** Sequential per Buddhist-era year (`RC69-0001`): payment receipt, return settlement and damage adjustment, all printable.
+- **Account.** Profile and measurements, favourites, in-app notifications, fitting appointments (30-minute slots, 2 fitting rooms), email verification and password reset.
 
-ค่าเริ่มต้นใช้ได้กับ XAMPP ทันที (ผู้ใช้ `root` ไม่มีรหัสผ่าน) ถ้าต้องการเปลี่ยน ให้คัดลอก
-`config/config.example.php` เป็น `config/config.php` แล้วแก้ค่าในนั้น
+### Staff and admins (`/admin`)
 
-- `db`: host, port, ชื่อฐานข้อมูล, ผู้ใช้, รหัสผ่าน
-- `app.env`: `dev` เปิดกล่องจดหมายจำลองและรายละเอียดข้อผิดพลาด **เฉพาะคนที่เปิดเว็บจากเครื่องนี้เอง** (localhost / 127.0.0.1)
-  ใช้ `production` เมื่อขึ้นเซิร์ฟเวอร์จริง ทั้งสองแบบผู้ดูแลระบบเปิดกล่องจดหมายจำลองได้เสมอ
-- `app.url`: ที่อยู่เว็บสำหรับลิงก์ในอีเมล (เช่น `https://rent.example.com`) ถ้าว่างไว้ ระบบใช้ที่อยู่ที่เปิดอยู่
-  แต่เชื่อเฉพาะ localhost / 127.0.0.1 หรือชื่อที่ใส่ไว้ใน `app.hosts` เท่านั้น (กันคนส่ง Host ปลอมให้ลิงก์รีเซ็ตรหัสผ่านชี้ไปเว็บอื่น)
-  ถ้าเปิดทดสอบจากมือถือผ่าน Wi-Fi เช่น `192.168.1.20` ให้ใส่ `'hosts' => ['192.168.1.20']` หรือกำหนด `app.url`
-- `app.key`: เปลี่ยนเป็นข้อความสุ่มยาว ๆ เมื่อใช้งานจริง
+- **Today.** Pickups, returns (with running late fees), parcels to ship and to inspect, fittings, holds about to expire, and the next 7 days.
+- **Front-desk booking.** Find or register a member, then pick a dress, dates, and the same delivery and return options customers get (with the member's saved addresses). Record cash, transfer or PromptPay on the spot, or leave a 24-hour hold. The booking's channel is recorded for reports.
+- **Slip review.** Each card shows the slip beside the amount due and the amount claimed. Approve to confirm the booking and issue the receipt; reject with a reason and the booking goes back to awaiting payment.
+- **Shipping queue** (`/admin/shipping`). Six tabs in work order: to ship, out for delivery, awaiting return, returns in transit, to inspect, open disputes. Late items are flagged.
+- **Labels.** One printable sheet with the outbound label, a prepaid return label, and a packing list with tick boxes and the booking's QR code.
+- **Tracking validation per carrier.** Thailand Post `AA123456789TH`, J&T 12 digits, Kerry/Flash 8–20 alphanumerics. Delivery failed, lost parcel, resend or switch to pickup (the delivery fee is refunded only if nothing was shipped).
+- **Scan** (`/admin/scan`). A barcode scanner or the phone camera reads a dress tag or booking QR and jumps to the next step. The dress QR tags print from the costume page.
+- **Inspection.** A 6-point checklist, accessories ticked off from the dress's list, and damage lines from a shop-wide price table (fixed THB or % of the dress's value, capped at that value). It includes photos, the outcome for the dress (back on rent, repair, or retire), and a live settlement summary. Closing the inspection issues the settlement receipt, records the refund or the amount still owed, and emails the customer.
+- **Dispute reply.** Answer the customer and optionally reduce the damage charge; the refund and an adjustment receipt are recorded automatically.
+- **Damage price table** (`/admin/damage-types`). 15 defaults across 7 areas of the dress. Admins edit them; staff can read them.
+- **Schedule.** Three weeks of every dress, coloured by booking state, with the cleaning tail shown faded.
+- **Dresses, categories, members, appointments.** Image upload with 4 generated sizes; account suspension and roles (admin only).
+- **Reports.** Rentals, finance and appointments for any date range, printable and exportable to CSV (UTF-8 BOM, so Excel shows Thai). Finance keeps shop income separate from deposits held.
+- **Settings** (admin only). Shop details, PromptPay and bank, rental rules (base days, maximum length, cleaning days, hold hours, cancellation cutoff, booking horizon), shipping fees, transit and windows, email and SMTP with a test button, and demo mode.
 
-**ก่อนเปิดให้คนอื่นใช้จริง** บัญชีทดลองทั้งสามในหัวข้อ 3 มีรหัสผ่านที่เปิดเผยอยู่ในหน้าเข้าสู่ระบบ ให้ติดตั้งด้วย
-`php cli/install.php --no-seed` (ไม่มีข้อมูลตัวอย่าง มีเฉพาะบัญชี admin@panteen.test / Admin1234) แล้วเข้าระบบไปเปลี่ยนอีเมลและรหัสผ่าน
-ของบัญชีนี้ทันที ปิด “เว็บไซต์สาธิต” ในตั้งค่าร้าน และตั้ง `app.env` เป็น `production`
+### Booking states
 
-### ติดตั้งด้วย Docker / Coolify
+Transitions are a fixed table in `BookingService::TRANSITIONS`; nothing skips a step.
 
-`docker-compose.yml` มีเว็บ (PHP 8.3 + Apache) และฐานข้อมูล MariaDB 10.11 ข้อมูลฐานข้อมูล สลิป และรูปชุด
-เก็บใน volume จึงไม่หายเมื่อ deploy ใหม่ การเริ่มครั้งแรกสร้างตารางและข้อมูลตัวอย่างให้เอง (ตั้ง `PANTEEN_SEED=none` ถ้าไม่ต้องการข้อมูลตัวอย่าง)
-
-- **Coolify**: สร้างแอปจาก Git repo นี้ (Build pack: Docker Compose) แล้วผูกโดเมนกับ service `web`
-  รหัสผ่านฐานข้อมูลและ app key (`SERVICE_PASSWORD_*`) Coolify สุ่มให้เอง ตั้ง `PANTEEN_APP_URL` ถ้าใช้โดเมนอื่น
-- **Docker ทั่วไป**: `SERVICE_PASSWORD_DB=... SERVICE_PASSWORD_DBROOT=... SERVICE_PASSWORD_64_APPKEY=... PANTEEN_APP_URL=https://โดเมน docker compose up -d`
-- ตรวจสถานะได้ที่ `/healthz` และงานตามเวลา (`cli/cron.php`) รันในคอนเทนเนอร์ทุก 10 นาที
-
-## 3. บัญชีทดลอง
-
-| บทบาท | อีเมล | รหัสผ่าน |
+| State | Meaning | Next |
 |---|---|---|
-| ผู้ดูแลระบบ (admin) | admin@panteen.test | Admin1234 |
-| พนักงาน (staff) | staff@panteen.test | Staff1234 |
-| สมาชิก (member) | member@panteen.test | Member1234 |
+| `pending_payment` | Held, waiting for payment | `awaiting_verification`, `confirmed` (cash), `cancelled`, `expired` |
+| `awaiting_verification` | Slip uploaded | `confirmed`, `pending_payment` (rejected), `cancelled` |
+| `confirmed` | Paid, waiting for pickup or dispatch | `picked_up`, `shipped`, `cancelled` |
+| `shipped` | Parcel on its way | `picked_up` (delivered), `confirmed` (failed or lost) |
+| `picked_up` | The customer has the dress | `returning`, `returned` |
+| `returning` | Return parcel sent or received, awaiting inspection | `returned` |
+| `returned` | Inspected and settled | — |
 
-หน้าเข้าสู่ระบบมีปุ่มกรอกบัญชีทดลองให้ แสดงเมื่อเปิด **โหมดสาธิต** (ค่าเริ่มต้น) โหมดนี้ยังแสดงแถบแจ้งว่าเป็นข้อมูลตัวอย่าง
-ลิงก์กล่องจดหมายจำลอง และปุ่มรีเซ็ตข้อมูลตัวอย่าง เมื่อใช้งานจริงให้ไปที่ ตั้งค่าร้าน แล้วติ๊กออกที่ “แสดงแถบ ข้อมูลตัวอย่าง…”
-และเปลี่ยนรหัสผ่านบัญชีทั้งสามหรือลบบัญชีทดลองทิ้ง
-
-## 4. อีเมล
-
-ระบบส่งอีเมลยืนยันสมัครสมาชิก ลืมรหัสผ่าน แจ้งสถานะการจอง และเตือนก่อนวันรับ/คืนชุด
-
-- **โหมดทดสอบ (`log`, ค่าเริ่มต้น)**: ไม่ส่งออกจริง เก็บทุกฉบับไว้ใน “กล่องจดหมายจำลอง” ที่ `/dev/mailbox`
-  (มีลิงก์ที่แถบด้านบนของเว็บ) ใช้สาธิตได้โดยไม่ต้องต่ออินเทอร์เน็ต
-- **ส่งจริง (`smtp`)**: เข้าระบบผู้ดูแล → ตั้งค่าร้าน → อีเมล แล้วกรอก SMTP หรือแก้ใน `config/config.php`
-  - Gmail: host `smtp.gmail.com`, port `587`, encryption `tls`, username = อีเมล Gmail,
-    password = **App Password 16 ตัว** (สร้างได้ที่ Google Account → Security → 2-Step Verification → App passwords)
-  - กดปุ่ม “ส่งอีเมลทดสอบ” ในหน้าตั้งค่าเพื่อตรวจว่าตั้งถูก
-  - โหมด smtp ยังเก็บสำเนาไว้ในกล่องจดหมายจำลองด้วย
-
-## 5. งานตามเวลา (ไม่บังคับ)
-
-เว็บจะยกเลิกการจองที่ไม่ชำระภายในเวลาที่กำหนด และส่งเตือนก่อนวันรับ/คืนชุดให้เองทุก 10 นาทีเมื่อมีคนเปิดเว็บ
-ถ้าต้องการให้ทำงานตรงเวลาแม้ไม่มีคนเปิดเว็บ ให้ตั้ง
-
-- **Windows Task Scheduler** ทุก 15 นาที: `C:\xampp\php\php.exe C:\xampp\htdocs\panteen-rent\cli\cron.php`
-- **Linux cron**: `*/15 * * * * php /path/to/panteen-rent/cli/cron.php`
-
-## 6. ความสามารถของระบบ
-
-**ลูกค้า / สมาชิก**
-- หน้าแรก: ภาพใหญ่เต็มจอพร้อมช่องค้นหา “วันงาน / หมวด / ไซส์” ใต้ภาพ, เลือกชุดตามงาน, ชุดมาใหม่, ตัวอย่างราคาครบทุกบรรทัด, ขั้นตอนการเช่า, นัดลองชุดที่ร้าน
-- รายการชุด (`/dresses`, `/c/{หมวด}`): แถบตัวกรองด้านข้าง (ค้นหา หมวด ไซส์ สี ค่าเช่า มาใหม่), เรียงตามมาใหม่/ยอดนิยม/ราคา,
-  เลือกวันงานแล้วทุกชุดบอกเป็นคำว่า “ว่าง” หรือ “ไม่ว่าง” ในวันนั้น พร้อมสวิตช์ “เฉพาะชุดที่ว่าง” กรองได้ทันทีโดยไม่โหลดหน้าใหม่
-  และใช้งานได้แม้ปิด JavaScript (บนมือถือ ตัวกรองเป็นแผงเลื่อนจากด้านข้าง)
-- หน้าชุด: รูปหลายมุม, ขนาด (อก/เอว/ยาว), ราคา/มัดจำ/ค่าปรับ, ปฏิทินวันว่าง (รวมวันซักหลังคืน), เทียบสัดส่วนของสมาชิก
-- สมัครสมาชิก ยืนยันอีเมล ลืมรหัสผ่าน แก้โปรไฟล์และสัดส่วน รายการโปรด
-- จองชุด: เลือกวันงาน/วันรับ/วันคืน คำนวณค่าเช่า วันเพิ่ม และมัดจำทันที ล็อกชุดไว้ 24 ชั่วโมงรอชำระ
-- ชำระเงิน: QR พร้อมเพย์ตามยอดจริง นับถอยหลัง อัปโหลดสลิป (ย่อรูปในเครื่องก่อนส่ง)
-- ติดตามสถานะการจอง ใบเสร็จพิมพ์ได้ ยกเลิกการจอง การแจ้งเตือนในเว็บและทางอีเมล
-- นัดลองชุดที่ร้านตามช่วงเวลาที่ว่าง
-- รับชุดได้ 3 แบบ: รับที่ร้าน, ส่งพัสดุถึงบ้าน (กรุงเทพฯ-ปริมณฑล / ต่างจังหวัด คิดค่าส่งตามเขต), เมสเซนเจอร์ (เฉพาะกรุงเทพฯ-ปริมณฑล)
-  และคืนชุดได้ 2 แบบ: คืนที่ร้าน หรือส่งพัสดุคืนด้วยใบปะหน้าที่ร้านแนบในกล่อง ระบบบอกวันที่ร้านต้องส่งออกและกันชุดเผื่อวันขนส่งไปกลับให้เอง
-- สมุดที่อยู่ (`/account/addresses`) เก็บได้ 5 ที่อยู่ ตั้งที่อยู่หลักได้ การจองเก็บสำเนาที่อยู่ไว้ แก้สมุดที่อยู่ภายหลังไม่กระทบการจองเดิม
-- หน้าการจองแสดงเลขพัสดุพร้อมลิงก์ติดตาม ปุ่ม “ได้รับชุดแล้ว” แจ้งสภาพชุดตอนเปิดกล่อง (ข้อความ + รูป ภายในเวลาที่กำหนด)
-  แจ้งเลขพัสดุส่งคืน ดูผลตรวจสภาพทีละรายการพร้อมรูป และโต้แย้งค่าเสียหายภายในจำนวนวันที่ร้านตั้งไว้
-
-**พนักงาน**
-- แดชบอร์ดงานวันนี้ (รับ/คืน/นัดลอง/สลิปรอตรวจ)
-- ตรวจสลิป อนุมัติ/ปฏิเสธพร้อมเหตุผล
-- จองหน้าร้านให้ลูกค้า (ค้นสมาชิกหรือสมัครให้ใหม่) รับเงินสด
-- บันทึกรับชุด คืนชุด คืนช้า/ชำรุด (หักจากมัดจำอัตโนมัติ) เลื่อนวัน ยกเลิก
-- ตารางการเช่าของทุกชุด จัดการนัดหมาย
-- งานจัดส่ง (`/admin/shipping`): แท็บต้องส่ง / ระหว่างส่ง / ถึงกำหนดคืน / พัสดุคืนกำลังมา / รอตรวจ / ข้อโต้แย้ง พร้อมธงว่าช้ากว่ากำหนด
-- บันทึกส่งพัสดุ (ตรวจรูปแบบเลขพัสดุตามบริษัทขนส่ง) ส่งไม่สำเร็จ/ส่งใหม่ เปลี่ยนเป็นรับที่ร้าน (คืนค่าส่งถ้ายังไม่ได้ส่ง)
-  รับพัสดุคืน พัสดุคืนสูญหาย พิมพ์ใบปะหน้า + ใบปะหน้าส่งคืน + ใบแพ็กของพร้อม QR
-- สแกนชุด (`/admin/scan`): ยิงบาร์โค้ด/QR ด้วยเครื่องสแกนหรือกล้องมือถือ เจอเลขจองหรือรหัสชุดแล้วพาไปขั้นตอนถัดไปทันที พิมพ์ป้าย QR ติดชุดได้
-- ตรวจสภาพตอนรับคืน: เช็กลิสต์ 6 จุด ติ๊กอุปกรณ์ที่หายจากรายการที่มากับชุด เลือกความเสียหายจาก “ตารางค่าเสียหาย” มาตรฐาน
-  ราคาคิดให้เอง ไม่เกินมูลค่าชุด แนบรูป คิดวันคืนช้าถึงวันที่ลูกค้าฝากส่ง (ไม่ใช่วันที่พัสดุถึงร้าน) แล้วออกใบสรุปการคืนชุด
-- ตอบข้อโต้แย้งค่าเสียหาย ลดให้บางส่วนหรือทั้งหมด ระบบบันทึกการคืนเงินและออกใบปรับปรุงให้
-
-**ผู้ดูแลระบบ** (ทำได้ทุกอย่างของพนักงาน และ)
-- จัดการชุด รูปภาพ หมวดหมู่
-- จัดการสมาชิก ระงับบัญชี กำหนดบทบาท
-- รายงานรายรับ การเช่า และนัดหมาย พร้อมส่งออก CSV (เปิดใน Excel ภาษาไทยได้)
-- ตั้งค่าร้าน: ข้อมูลร้าน พร้อมเพย์ เวลาเปิดปิด จำนวนวันเช่า ค่าวันเพิ่ม วันซักชุด เงื่อนไข อีเมล
-  และการจัดส่ง (เปิด/ปิดแต่ละบริการ ค่าส่งตามเขต วันขนส่ง เวลาตัดรอบ เวลาแจ้งสภาพตอนได้รับ จำนวนวันโต้แย้ง)
-- ตารางค่าเสียหาย (`/admin/damage-types`) เพิ่ม/แก้ราคามาตรฐาน แบบบาทหรือร้อยละของมูลค่าชุด, มูลค่าชุดและอุปกรณ์ที่มากับชุดตั้งในหน้าแก้ไขชุด
-
-**ความปลอดภัย**: รหัสผ่านเข้ารหัสด้วย bcrypt, CSRF token ทุกฟอร์ม, ป้องกัน SQL injection ด้วย prepared statement,
-ล็อกบัญชีชั่วคราวเมื่อเดารหัสผิดหลายครั้ง, ตรวจสิทธิ์ทุกหน้า (ลูกค้าเปิดการจองของคนอื่นไม่ได้),
-ตรวจไฟล์อัปโหลดว่าเป็นรูปจริง, ป้องกันจองชนกันเมื่อกดพร้อมกันหลายคน (ล็อกแถวในฐานข้อมูล)
-
-## 7. โครงสร้างโฟลเดอร์
+### Money, in one place
 
 ```
-public/         จุดเข้าเว็บ (index.php) + assets (css, js, ไอคอน, ฟอนต์) + media
-                media/costumes: รูปชุด 4 ขนาด (mini/ สำหรับแถวในตารางและแผงข้าง, thumb/ สำหรับการ์ดชุด, ขนาดปกติ, large/ สำหรับหน้าชุดบนจอความละเอียดสูง)
-                media/site: ภาพหน้าแรก (hero-2160, hero-4320, hero-m สำหรับมือถือ, fitting)
-app/            Controllers, Services (กฎธุรกิจ), Core (Router, DB, View...), Views (หน้าเว็บ)
-config/         การตั้งค่า
-database/       schema.sql, ไฟล์ส่งออกฐานข้อมูล, ที่มาของรูป, สลิปตัวอย่าง
-cli/            install.php (สร้างฐานข้อมูล), cron.php (งานตามเวลา), seed.php
-storage/        สลิปที่อัปโหลด, log, cache (ต้องเขียนได้)
-tests/          ชุดทดสอบอัตโนมัติ (lint/ = การตั้งค่าตัวตรวจโค้ด)
+rent      = base price (covers 3 days) + extra days × extra-day price
+due       = rent + deposit + delivery fee + return fee
+late fee  = max(0, return or postmark date − return date) × late fee per day
+damage    = Σ unit price × qty   (percent items use the dress's value; total capped at that value)
+refund    = max(0, deposit − late fee − damage);   anything above the deposit is recorded as owed
 ```
 
-## 8. การทดสอบ
+`app/Services/Pricing.php` (`quote()`, `settle()`) and `app/Services/Inspection.php` hold these; the unit tests pin them.
 
-ชุดทดสอบใช้ฐานข้อมูลแยกชื่อ `panteen_test` (สร้างใหม่ทุกครั้ง ไม่แตะข้อมูลจริง)
+## Architecture
 
-```
-php tests/run.php          # ทั้งหมด 445 ข้อ: unit 242 ข้อ + HTTP 203 ข้อ
-php tests/run.php unit     # กฎธุรกิจ: ราคา, วันว่าง, สถานะ, จองชนกัน (6 process พร้อมกัน), QR พร้อมเพย์, ไอคอนครบ,
-                           # จัดส่ง/ส่งคืนทางพัสดุ/ตรวจสภาพ/โต้แย้ง (tests/shipping.php)
-php tests/run.php http     # ยิงคำขอจริงผ่านเว็บเซิร์ฟเวอร์: สิทธิ์, CSRF, สมัคร→ยืนยัน→จอง→สลิป→อนุมัติ→ใบเสร็จ ฯลฯ
-```
-
-ทดสอบผ่านเบราว์เซอร์จริง (Playwright, 138 ข้อ: หน้าแรก → ใส่วันงาน → รายการชุด → ตัวกรอง/เรียงลำดับ → หน้าชุด → จอง (รวมเลือกส่งพัสดุ) → สลิป → อนุมัติ → ใบเสร็จ,
-ทุกหน้าที่จอ 1366 และ 390 px ไม่มีหน้าล้นจอ, เมนูและแผงตัวกรองบนมือถือ, การเข้าถึงด้วยคีย์บอร์ด)
+A front controller and a small hand-written core instead of a framework.
 
 ```
+public/index.php      the only web entry point: bootstrap, security headers, session, /healthz, dispatch
+app/Core/             Router, Middleware (guest/auth/verified/staff/admin), DB (PDO wrapper with transactions),
+                      Auth (bcrypt, lockout), Csrf, Session, Validator (Thai messages), Upload (GD re-encode),
+                      View, Mailer + SmtpClient (TLS/SSL, no library), Config
+app/Services/         every business rule: BookingService, Availability, Pricing, Shipping, Fulfilment,
+                      Inspection, Photos, Addresses, Receipts, Counter, PromptPay, Catalog, Appointments,
+                      Reminders, Notifier, Reports, Settings, Status, Tokens, DemoSeeder
+app/Controllers/      thin: read input, call a service, render a view (Admin/ for the back office)
+app/Views/            PHP templates; layouts for shop, admin, mail and print
+app/routes.php        113 routes, each with its middleware
+```
+
+- **Double booking.** `BookingService` locks the dress row (`SELECT … FOR UPDATE`) inside a transaction and re-checks the lock window before inserting. `tests/race.php` fires 6 processes at the same dress and date and expects exactly one booking.
+- **Document numbers.** `Counter` hands out gap-free yearly sequences (`PT69-0001` bookings, `RC69-0001` receipts) under a row lock.
+- **Reminders.** `Reminders::run()` expires unpaid holds and sends pickup, return, overdue, parcel and fitting reminders. Each reminder has a dedupe key, so running it twice sends nothing twice. It runs from `cli/cron.php`, or on page views at most every 10 minutes when no cron is set.
+- **Settings.** Defaults live in code (`Settings::DEFAULTS`) and the admin's changes in the `settings` table; `/how-to-rent` reads the live values.
+- **Database.** 21 tables in `database/schema.sql`; `database/panteen_rent.sql` is the same schema plus demo data for a phpMyAdmin import. The ER diagram and table dictionary are in the guide (section 12).
+
+## Requirements
+
+- PHP 8.1 or newer with `pdo_mysql`, `mbstring`, `gd` and `openssl` (developed on PHP 8.5, container on 8.3)
+- MySQL 8+ or MariaDB 10.4+ (XAMPP ships MariaDB 10.4)
+- Apache with `mod_rewrite`, or PHP's built-in server for local use
+- Node.js 20+ only for the browser tests and the linters
+
+## Usage
+
+### XAMPP (Windows)
+
+1. Copy the folder to `C:\xampp\htdocs\panteen-rent`.
+2. Start **Apache** and **MySQL** in the XAMPP Control Panel.
+3. Create the database with demo data, either way:
+   ```
+   cd C:\xampp\htdocs\panteen-rent
+   C:\xampp\php\php.exe cli\install.php
+   ```
+   or phpMyAdmin → Import → `database/panteen_rent.sql`. The demo bookings in the SQL file are dated from when it was exported; *Settings → Reset demo data* re-dates them to today.
+4. Open http://localhost/panteen-rent/
+
+Links detect the sub-folder by themselves. The root `.htaccess` routes every request into `public/` and blocks `app/`, `config/`, `storage/`, `database/` and `tests/`.
+
+### Anywhere else
+
+```bash
+php cli/install.php                       # create the database, tables and demo data
+php -S 127.0.0.1:8080 -t public public/index.php
+```
+
+| Command | What it does |
+|---|---|
+| `php cli/install.php` | Create the database and tables, then seed demo data |
+| `php cli/install.php --no-seed` | Same without demo data; creates only `admin@panteen.test` / `Admin1234` |
+| `php cli/seed.php` | Wipe and re-seed demo data (dates relative to today) |
+| `php cli/cron.php` | Run reminders and expire unpaid holds once |
+| `php tests/run.php` | Unit and HTTP tests (445) |
+
+### Configuration
+
+The defaults match XAMPP (`root`, no password). To change them, copy `config/config.example.php` to `config/config.php`:
+
+| Key | Purpose |
+|---|---|
+| `db.*` | host, port, name, user, pass |
+| `app.env` | `dev` shows error details and the mock mailbox to localhost only; use `production` on a server |
+| `app.url` | Base URL for links in emails. If empty, the request host is trusted only when it is localhost or listed in `app.hosts` (so a forged `Host` header cannot redirect a password-reset link). |
+| `app.key` | A long random string |
+| `mail.driver` | `log` (store in the mock mailbox at `/dev/mailbox`) or `smtp` |
+| `mail.smtp.*` | host, port, encryption, username, password. For Gmail use `smtp.gmail.com:587`, `tls` and a 16-character App Password. |
+
+Containers set the same values through `PANTEEN_DB_HOST`, `PANTEEN_DB_PORT`, `PANTEEN_DB_NAME`, `PANTEEN_DB_USER`, `PANTEEN_DB_PASS`, `PANTEEN_APP_ENV`, `PANTEEN_APP_URL`, `PANTEEN_APP_KEY`, `PANTEEN_MAIL_DRIVER`, `PANTEEN_MAIL_FROM`, `PANTEEN_SMTP_HOST`, `PANTEEN_SMTP_USER` and `PANTEEN_SMTP_PASS` (read in `app/bootstrap.php`).
+
+SMTP can also be set in the admin under *Settings → Email*, which has a *Send test email* button. Even in `smtp` mode, a copy of every message stays in the mock mailbox.
+
+### Scheduled jobs
+
+Without a cron the site runs its reminders on page views (at most every 10 minutes). To have them run on time anyway:
+
+- Windows Task Scheduler, every 15 minutes: `C:\xampp\php\php.exe C:\xampp\htdocs\panteen-rent\cli\cron.php`
+- Linux: `*/15 * * * * php /path/to/panteen-rent/cli/cron.php`
+
+### Demo accounts
+
+| Role | Email | Password |
+|---|---|---|
+| Admin | admin@panteen.test | Admin1234 |
+| Staff | staff@panteen.test | Staff1234 |
+| Member | member@panteen.test | Member1234 |
+
+While demo mode is on, the login page offers one-click buttons for these accounts. Before real use, install with `--no-seed`, then change the admin's email and password. Turn off demo mode in *Settings* and set `app.env` to `production`.
+
+### Tests
+
+The test suites build and use a separate `panteen_test` database, recreated on every run.
+
+```bash
+php tests/run.php          # 445 tests: unit 242 + HTTP 203
+php tests/run.php unit     # pricing, availability, states, the 6-process race, PromptPay, shipping, inspection, disputes
+php tests/run.php http     # real requests: permissions, CSRF, IDOR, register → verify → book → slip → approve → receipt, parcels, inspection
+```
+
+Browser tests (Playwright, 138 checks) cover the whole customer and staff journey. They check every page at 1366 px and 390 px for horizontal overflow, plus the mobile menu and filter drawer and keyboard access.
+
+```bash
 cd tests/e2e && npm install && npx playwright install chromium && cd ../..
-sh tests/serve-test.sh                 # หน้าต่างที่ 1: เปิดเซิร์ฟเวอร์ทดสอบที่พอร์ต 8089
-node tests/e2e/e2e.js /tmp/shots       # หน้าต่างที่ 2: รันทดสอบ เก็บภาพหน้าจอไว้ในโฟลเดอร์ที่ระบุ
+sh tests/serve-test.sh                  # terminal 1: test server on :8089
+node tests/e2e/e2e.js ./shots           # terminal 2: run, saving screenshots to ./shots
 ```
 
-ถ้าฐานข้อมูลไม่ได้อยู่ที่ 127.0.0.1:3306 ให้กำหนด `PANTEEN_DB_HOST` และ `PANTEEN_DB_PORT` ก่อนรัน
+Set `PANTEEN_DB_HOST` / `PANTEEN_DB_PORT` if the database is not on `127.0.0.1:3306`.
 
-ตรวจคุณภาพโค้ด (ตอนส่งงานผ่านทั้งหมด ไม่มี error และ warning)
+Static checks, all clean:
 
-```
-php phpstan.phar analyse -c tests/lint/phpstan.neon          # PHPStan ระดับ 6 (โหลด phpstan.phar 2.x จาก github.com/phpstan/phpstan)
+```bash
+php phpstan.phar analyse -c tests/lint/phpstan.neon      # PHPStan level 6 (phpstan.phar 2.x)
 cd tests/lint && npm install && cd ../..
 tests/lint/node_modules/.bin/eslint --no-config-lookup -c tests/lint/eslint.config.mjs public/assets/js/app.js tests/e2e/e2e.js
 tests/lint/node_modules/.bin/stylelint --config tests/lint/stylelintrc.json public/assets/css/app.css public/assets/css/admin.css
 ```
 
-Stylelint ใช้ชุดกฎ standard โดยปิดสองข้อที่ขัดกับรูปแบบของโปรเจกต์ (เขียนหนึ่งกฎต่อหนึ่งบรรทัด และลำดับ selector
-ที่จัดตามส่วนของหน้าแทนความเฉพาะเจาะจง) ส่วน `public/assets/js/qrcode.js` เป็นไลบรารีภายนอก (MIT) จึงไม่ได้ตรวจ
+`public/assets/js/qrcode.js` is a third-party library (MIT) and is not linted.
 
-## 9. หน้าตาเว็บไซต์
+## Deploy
 
-แนวทางการออกแบบ (สี ตัวอักษร ระยะ ส่วนประกอบ และเหตุผล) อยู่ใน `DESIGN.md`
-สไตล์ทั้งหมดอยู่ในไฟล์เดียว `public/assets/css/app.css` (หลังร้านเพิ่ม `admin.css`) ไม่ต้อง build
+`Dockerfile` builds PHP 8.3 + Apache with `gd`, `pdo_mysql` and OPcache, serves `public/`, and health-checks `/healthz`. That endpoint answers `ok` only when the database responds. `docker/entrypoint.sh` waits for the database, then runs `cli/install.php` once if there are no tables (`PANTEEN_SEED=demo` adds demo data). It runs `cli/cron.php` every 10 minutes in the background and starts Apache.
+
+`docker-compose.yml` adds MariaDB 10.11. The database, uploaded slips, condition photos and dress images live in named volumes, so a redeploy keeps them.
+
+- **Coolify:** create an application from this repository with the *Docker Compose* build pack and attach the domain to the `web` service. Coolify generates the `SERVICE_PASSWORD_*` secrets; set `PANTEEN_APP_URL` if the domain differs, and set `PANTEEN_MAIL_DRIVER=smtp` plus the SMTP variables to send real email.
+- **Plain Docker:**
+  ```bash
+  SERVICE_PASSWORD_DB=... SERVICE_PASSWORD_DBROOT=... SERVICE_PASSWORD_64_APPKEY=... \
+  PANTEEN_APP_URL=https://your.domain docker compose up -d
+  ```
+
+The repository contains no secrets.
+
+## Security notes
+
+- **Passwords.** Hashed with `password_hash` (bcrypt) and rehashed on login when the cost changes. Unknown emails are checked against a dummy hash, so a lookup takes the same time either way. Passwords need at least 8 characters with letters and digits.
+- **Login throttling.** 5 failures per email or per IP lock login for 15 minutes.
+- **Email tokens.** Verification and reset links store only a SHA-256 of the token, are single-use and expire.
+- **Sessions.** Cookies are HttpOnly, `SameSite=Lax`, and `Secure` over HTTPS. The session ID is regenerated on login. Changing the password ends other sessions.
+- **CSRF.** Every POST carries a token.
+- **Authorisation.** Every route declares its middleware. A customer who opens another customer's booking, receipt, slip or photo gets a 404, not a 403.
+- **Uploads.** JPEG, PNG and WebP only, detected from the content, not the extension. Limited to 5 MB, re-encoded through GD (which strips metadata) and saved under random names. Slips and condition photos live outside `public/` and are served only through permission-checked routes.
+- **SQL and HTML.** Prepared statements everywhere, and every value is escaped with `e()` on output.
+- **CSV export.** Cells that start with `=`, `+`, `-`, `@`, tab or carriage return get a leading `'` (formula injection).
+- **Headers.** `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: same-origin`. There is no CSP; add one at the web server if needed.
+- **Demo credentials are public.** The accounts above are printed here and on the login page. Never run a public instance with demo data and the default passwords.
+
+## Project structure
+
+```
+public/            index.php, .htaccess
+  assets/css       app.css (storefront), admin.css (back office), no build step
+  assets/js        app.js (all behaviour), qrcode.js (MIT)
+  assets/fonts     Anuphan, Libre Caslon Display (SIL OFL, self-hosted)
+  assets/img       icons.svg sprite (Lucide, ISC), favicon
+  media/           dress photos in 4 sizes (mini, thumb, normal, large) and site images
+app/               bootstrap.php, routes.php, helpers.php, Core/, Services/, Controllers/, Views/
+cli/               install.php, seed.php, cron.php
+config/            config.example.php (copy to config.php, which is gitignored)
+database/          schema.sql, panteen_rent.sql, photo-credits.json, seed-slips/, seed-fonts/
+docker/            apache.conf, php.ini, entrypoint.sh
+storage/           uploaded slips, condition photos, logs, cache (must be writable)
+tests/             unit.php, http.php, shipping.php, race.php, run.php, e2e/ (Playwright), lint/
+docs/              PROJECT-GUIDE.md (full Thai guide) and its screenshots
+PRODUCT.md         product brief: users, purpose, tone
+DESIGN.md          the design system as built: colour, type, spacing, components and the reasons for them
+```
+
+## Credits
+
+- Photos: [Pexels License](https://www.pexels.com/license/). Each photographer is credited on `/credits` (data in `database/photo-credits.json`), and every image file carries its source in its metadata.
+- Icons: [Lucide](https://lucide.dev) (ISC), `public/assets/img/LICENSE-lucide.txt`.
+- Fonts: Anuphan and Libre Caslon Display (SIL Open Font License), with their licences in `public/assets/fonts/`.
+- QR generator: `qrcode.js` by Kazuhiko Arase (MIT).
