@@ -1,0 +1,11 @@
+{
+  "private": true,
+  "description": "Linters for the front-end files (npm install here, then see README section 8)",
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "globals": "^17.14.0",
+    "stylelint": "^16.26.1",
+    "stylelint-config-standard": "^36.0.1"
+  }
+}

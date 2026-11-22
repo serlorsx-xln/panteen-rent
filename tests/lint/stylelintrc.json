@@ -1,0 +1,10 @@
+{
+  "extends": "stylelint-config-standard",
+  "rules": {
+    "declaration-block-single-line-max-declarations": null,
+    "no-descending-specificity": null,
+    "media-feature-range-notation": "prefix",
+    "selector-class-pattern": ["^[a-z0-9]+(?:-[a-z0-9_]+)*$", { "message": "class names are kebab-case; a status suffix may keep the database value (bar-picked_up)" }],
+    "property-no-vendor-prefix": [true, { "ignoreProperties": ["text-size-adjust"] }]
+  }
+}

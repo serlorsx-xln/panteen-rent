@@ -1,0 +1,7 @@
+# Uploaded/seed images only: never run scripts from here
+<IfModule php_module>
+  php_flag engine off
+</IfModule>
+<FilesMatch "\.(php|phtml|phar|pl|py|cgi)$">
+  Require all denied
+</FilesMatch>

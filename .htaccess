@@ -1,0 +1,11 @@
+# Panteen Rent: send every request into public/ (works in an XAMPP htdocs sub-folder)
+Options -Indexes
+# never serve dotfiles (.htaccess, .env, .git …)
+<FilesMatch "^\.">
+  Require all denied
+</FilesMatch>
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule ^$ public/ [L]
+  RewriteRule ^((?!public/).*)$ public/$1 [L]
+</IfModule>

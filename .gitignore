@@ -1,0 +1,10 @@
+._*
+.DS_Store
+.impeccable/
+config/config.php
+storage/cache/*
+storage/logs/*
+storage/slips/*
+storage/condition/*
+!storage/.htaccess
+node_modules/

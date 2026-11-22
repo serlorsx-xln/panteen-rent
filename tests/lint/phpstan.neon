@@ -1,0 +1,16 @@
+# PHPStan level 6 over everything except the view templates.
+# Run from the project root:  php phpstan.phar analyse -c tests/lint/phpstan.neon
+parameters:
+  level: 6
+  bootstrapFiles: [phpstan-bootstrap.php]
+  paths:
+    - ../../app
+    - ../../cli
+    - ../../public/index.php
+    - ../../tests
+  excludePaths:
+    - ../../app/Views
+    - ../../tests/e2e
+    - ../../tests/lint
+  # DB and socket calls return fresh values each time; do not let PHPStan assume a repeated call returns the same thing
+  rememberPossiblyImpureFunctionValues: false

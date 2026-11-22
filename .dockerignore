@@ -1,0 +1,14 @@
+.git
+.impeccable
+._*
+**/._*
+.DS_Store
+storage/cache/*
+storage/logs/*
+storage/slips/*
+storage/condition/*
+tests
+config/config.php
+node_modules
+docker-compose.yml
+*.md
