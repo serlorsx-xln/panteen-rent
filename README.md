@@ -202,16 +202,18 @@ tests/lint/node_modules/.bin/stylelint --config tests/lint/stylelintrc.json publ
 
 ## Deploy
 
-`Dockerfile` builds PHP 8.3 + Apache with `gd`, `pdo_mysql` and OPcache, serves `public/`, and health-checks `/healthz`. That endpoint answers `ok` only when the database responds. `docker/entrypoint.sh` waits for the database, then runs `cli/install.php` once if there are no tables (`PANTEEN_SEED=demo` adds demo data). It runs `cli/cron.php` every 10 minutes in the background and starts Apache.
+`Dockerfile` builds PHP 8.3 + Apache with `gd`, `pdo_mysql` and OPcache, serves `public/`, and health-checks `/healthz`. That endpoint answers `ok` only when the database responds. `docker/entrypoint.sh` waits for the database, runs `cli/install.php` once if there are no tables (`PANTEEN_SEED=demo` adds demo data). It runs `cli/cron.php` every 10 minutes in the background and starts Apache.
 
-`docker-compose.yml` adds MariaDB 10.11. The database, uploaded slips, condition photos and dress images live in named volumes, so a redeploy keeps them.
+The image runs in one of two ways:
 
-- **Coolify:** create an application from this repository with the *Docker Compose* build pack and attach the domain to the `web` service. Coolify generates the `SERVICE_PASSWORD_*` secrets; set `PANTEEN_APP_URL` if the domain differs, and set `PANTEEN_MAIL_DRIVER=smtp` plus the SMTP variables to send real email.
-- **Plain Docker:**
+- **Single container** (`coolify.yaml`, the live deploy). When `PANTEEN_DB_HOST` is not set, the entrypoint starts a MariaDB server inside the container, listening only on 127.0.0.1. It creates the `panteen_rent` database and a `panteen` user, and generates the database password and the app key on first start. Those are kept in `/var/lib/mysql/panteen-secrets.env` next to the data. Everything lives in the container, so **a redeploy starts from fresh demo data** unless persistent volumes are added for `/var/lib/mysql`, `/var/www/panteen/storage` and `/var/www/panteen/public/media`. On Coolify, create the application from this repository (it picks up `coolify.yaml` and builds with the *Dockerfile* build pack on port 80), then attach the domain.
+- **Two containers** (`docker-compose.yml`): the web image plus MariaDB 10.11, with the database, slips, condition photos and dress images in named volumes that survive redeploys. Set `PANTEEN_DB_HOST=db` (the compose file does), and supply `SERVICE_PASSWORD_DB`, `SERVICE_PASSWORD_DBROOT` and `SERVICE_PASSWORD_64_APPKEY`. Coolify generates these for a *Docker Compose* application.
   ```bash
   SERVICE_PASSWORD_DB=... SERVICE_PASSWORD_DBROOT=... SERVICE_PASSWORD_64_APPKEY=... \
   PANTEEN_APP_URL=https://your.domain docker compose up -d
   ```
+
+In either mode, set `PANTEEN_MAIL_DRIVER=smtp` plus the SMTP variables (or fill in *Settings → Email*) to send real email.
 
 The repository contains no secrets.
 
@@ -242,7 +244,8 @@ app/               bootstrap.php, routes.php, helpers.php, Core/, Services/, Con
 cli/               install.php, seed.php, cron.php
 config/            config.example.php (copy to config.php, which is gitignored)
 database/          schema.sql, panteen_rent.sql, photo-credits.json, seed-slips/, seed-fonts/
-docker/            apache.conf, php.ini, entrypoint.sh
+docker/            apache.conf, php.ini, mariadb.cnf (bundled database), entrypoint.sh
+coolify.yaml       single-container Coolify deploy (Dockerfile build pack, port 80)
 storage/           uploaded slips, condition photos, logs, cache (must be writable)
 tests/             unit.php, http.php, shipping.php, race.php, run.php, e2e/ (Playwright), lint/
 docs/              PROJECT-GUIDE.md (full Thai guide) and its screenshots

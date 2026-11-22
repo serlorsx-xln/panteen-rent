@@ -1,0 +1,21 @@
+# Single-container deploy on Coolify: the image runs Apache + PHP and, because PANTEEN_DB_HOST is not set,
+# its own MariaDB. Data lives in the container (/var/lib/mysql, storage/, public/media); add a persistent
+# volume for /var/lib/mysql in Coolify to keep it across redeploys. docker-compose.yml is the two-container option.
+apiVersion: coolify/v1
+kind: Project
+metadata:
+  name: panteen-rent
+  displayName: Panteen Rent
+spec:
+  runtime: docker
+  services:
+    - name: web
+      type: web
+      port: 80
+      build:
+        dockerfile: Dockerfile
+      env:
+        PANTEEN_APP_ENV: production
+        PANTEEN_APP_URL: https://panteenrent.s3rx.net
+        PANTEEN_MAIL_DRIVER: log
+        PANTEEN_SEED: demo

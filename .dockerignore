@@ -12,3 +12,5 @@ config/config.php
 node_modules
 docker-compose.yml
 *.md
+docs
+coolify.yaml

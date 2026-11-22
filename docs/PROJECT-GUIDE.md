@@ -839,10 +839,10 @@ panteen rent/
 ├── cli/                    ← install.php, seed.php, cron.php
 ├── config/                 ← config.example.php (คัดลอกเป็น config.php)
 ├── database/               ← schema.sql, panteen_rent.sql, photo-credits.json, สลิปตัวอย่าง
-├── docker/                 ← apache.conf, php.ini, entrypoint.sh
+├── docker/                 ← apache.conf, php.ini, mariadb.cnf, entrypoint.sh
 ├── storage/                ← สลิป รูปสภาพชุด log cache (ต้องเขียนได้)
 ├── tests/                  ← unit, HTTP, e2e (Playwright), lint config
-├── Dockerfile, docker-compose.yml
+├── Dockerfile, docker-compose.yml, coolify.yaml
 └── README.md, DESIGN.md, docs/
 ```
 
@@ -1153,8 +1153,13 @@ password = App Password 16 ตัว (Google Account → Security → 2-Step Ver
 
 - `Dockerfile`: PHP 8.3 + Apache, เปิด gd/pdo_mysql/opcache, DocumentRoot = `public/`, HEALTHCHECK ที่ `/healthz`
 - `docker/entrypoint.sh`: รอฐานข้อมูล → ถ้ายังไม่มีตาราง รัน `cli/install.php` ครั้งเดียว → รัน cron ทุก 10 นาทีเบื้องหลัง → เริ่ม Apache
-- `docker-compose.yml`: service `web` + `db` (MariaDB 10.11) ข้อมูลฐานข้อมูล สลิป รูปสภาพ และรูปชุดเก็บใน volume ไม่หายเมื่อ deploy ใหม่
-- รหัสผ่านฐานข้อมูลและ app key ใช้ตัวแปร `SERVICE_PASSWORD_*` ที่ Coolify สุ่มให้เอง (repo ไม่มีรหัสลับ)
+- **แบบคอนเทนเนอร์เดียว** (`coolify.yaml` ใช้กับเว็บจริงบน Coolify): ถ้าไม่ได้ตั้ง `PANTEEN_DB_HOST` คอนเทนเนอร์จะเปิด MariaDB ในตัวเอง
+  (รับเฉพาะ 127.0.0.1) สร้างฐานข้อมูล `panteen_rent` ผู้ใช้ `panteen` และสุ่มรหัสผ่านกับ app key ให้เองตอนเริ่มครั้งแรก
+  เก็บไว้ที่ `/var/lib/mysql/panteen-secrets.env`
+  ⚠️ ข้อมูลทั้งหมดอยู่ในคอนเทนเนอร์ **deploy ใหม่เมื่อไรข้อมูลจะกลับเป็นข้อมูลตัวอย่างชุดใหม่** ถ้าจะใช้จริงให้เพิ่ม Persistent Storage
+  ใน Coolify ที่ `/var/lib/mysql`, `/var/www/panteen/storage` และ `/var/www/panteen/public/media`
+- **แบบสองคอนเทนเนอร์** (`docker-compose.yml`): service `web` + `db` (MariaDB 10.11) ข้อมูลฐานข้อมูล สลิป รูปสภาพ และรูปชุดเก็บใน volume
+  ไม่หายเมื่อ deploy ใหม่ รหัสผ่านฐานข้อมูลและ app key ใช้ตัวแปร `SERVICE_PASSWORD_*` (Coolify สุ่มให้เองเมื่อสร้างแบบ Docker Compose; repo ไม่มีรหัสลับ)
 - รันเองด้วย Docker: `SERVICE_PASSWORD_DB=... SERVICE_PASSWORD_DBROOT=... SERVICE_PASSWORD_64_APPKEY=... PANTEEN_APP_URL=https://โดเมน docker compose up -d`
 
 ---

@@ -1,4 +1,6 @@
-# Panteen Rent: PHP 8.3 + Apache. The database runs as a separate container (see docker-compose.yml).
+# Panteen Rent: PHP 8.3 + Apache.
+# With PANTEEN_DB_HOST set (docker-compose.yml sets "db") it uses that database server; without it the
+# container runs its own MariaDB (single-container deploys). See docker/entrypoint.sh.
 FROM php:8.3-apache
 
 RUN apt-get update \
@@ -9,6 +11,11 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends libjpeg62-turbo libpng16-16 libwebp7 libfreetype6 \
  && rm -rf /var/lib/apt/lists/* \
  && a2enmod rewrite expires headers remoteip
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends mariadb-server mariadb-client \
+ && rm -rf /var/lib/apt/lists/*
+COPY docker/mariadb.cnf /etc/mysql/mariadb.conf.d/99-panteen.cnf
 
 COPY docker/php.ini /usr/local/etc/php/conf.d/panteen.ini
 COPY docker/apache.conf /etc/apache2/sites-available/000-default.conf
@@ -21,6 +28,6 @@ RUN mkdir -p storage/cache storage/condition storage/logs storage/slips \
  && chown -R www-data:www-data storage public/media
 
 EXPOSE 80
-HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 CMD php -r 'exit(@file_get_contents("http://127.0.0.1/healthz") === "ok" ? 0 : 1);'
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 CMD php -r 'exit(@file_get_contents("http://127.0.0.1/healthz") === "ok" ? 0 : 1);'
 ENTRYPOINT ["panteen-entrypoint"]
 CMD ["apache2-foreground"]
