@@ -1,16 +1,18 @@
-# Panteen Rent on Docker / Coolify: web (PHP + Apache) and db (MariaDB). Set the variables in Coolify's Environment tab.
+# Panteen Rent on Docker / Coolify: web (PHP + Apache) and db (MariaDB).
+# On Coolify the SERVICE_PASSWORD_* values are generated for you (see the Environment tab).
+# Elsewhere set them yourself, e.g. SERVICE_PASSWORD_DB=... SERVICE_PASSWORD_DBROOT=... SERVICE_PASSWORD_64_APPKEY=... docker compose up -d
 services:
   web:
     build: .
     restart: unless-stopped
     environment:
       PANTEEN_APP_ENV: production
-      PANTEEN_APP_URL: ${PANTEEN_APP_URL:-}
-      PANTEEN_APP_KEY: ${PANTEEN_APP_KEY:?set PANTEEN_APP_KEY to a long random string}
+      PANTEEN_APP_URL: ${PANTEEN_APP_URL:-https://panteenrent.s3rx.net}
+      PANTEEN_APP_KEY: ${SERVICE_PASSWORD_64_APPKEY}
       PANTEEN_DB_HOST: db
       PANTEEN_DB_NAME: panteen_rent
       PANTEEN_DB_USER: panteen
-      PANTEEN_DB_PASS: ${PANTEEN_DB_PASS:?set PANTEEN_DB_PASS}
+      PANTEEN_DB_PASS: ${SERVICE_PASSWORD_DB}
       PANTEEN_MAIL_DRIVER: ${PANTEEN_MAIL_DRIVER:-log}
       PANTEEN_SEED: ${PANTEEN_SEED:-demo}
     volumes:
@@ -27,8 +29,8 @@ services:
     environment:
       MARIADB_DATABASE: panteen_rent
       MARIADB_USER: panteen
-      MARIADB_PASSWORD: ${PANTEEN_DB_PASS:?set PANTEEN_DB_PASS}
-      MARIADB_ROOT_PASSWORD: ${PANTEEN_DB_ROOT_PASS:?set PANTEEN_DB_ROOT_PASS}
+      MARIADB_PASSWORD: ${SERVICE_PASSWORD_DB}
+      MARIADB_ROOT_PASSWORD: ${SERVICE_PASSWORD_DBROOT}
       MARIADB_CHARACTER_SET_SERVER: utf8mb4
       MARIADB_COLLATION_SERVER: utf8mb4_unicode_ci
       TZ: Asia/Bangkok

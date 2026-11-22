@@ -52,6 +52,16 @@
 `php cli/install.php --no-seed` (ไม่มีข้อมูลตัวอย่าง มีเฉพาะบัญชี admin@panteen.test / Admin1234) แล้วเข้าระบบไปเปลี่ยนอีเมลและรหัสผ่าน
 ของบัญชีนี้ทันที ปิด “เว็บไซต์สาธิต” ในตั้งค่าร้าน และตั้ง `app.env` เป็น `production`
 
+### ติดตั้งด้วย Docker / Coolify
+
+`docker-compose.yml` มีเว็บ (PHP 8.3 + Apache) และฐานข้อมูล MariaDB 10.11 ข้อมูลฐานข้อมูล สลิป และรูปชุด
+เก็บใน volume จึงไม่หายเมื่อ deploy ใหม่ การเริ่มครั้งแรกสร้างตารางและข้อมูลตัวอย่างให้เอง (ตั้ง `PANTEEN_SEED=none` ถ้าไม่ต้องการข้อมูลตัวอย่าง)
+
+- **Coolify**: สร้างแอปจาก Git repo นี้ (Build pack: Docker Compose) แล้วผูกโดเมนกับ service `web`
+  รหัสผ่านฐานข้อมูลและ app key (`SERVICE_PASSWORD_*`) Coolify สุ่มให้เอง ตั้ง `PANTEEN_APP_URL` ถ้าใช้โดเมนอื่น
+- **Docker ทั่วไป**: `SERVICE_PASSWORD_DB=... SERVICE_PASSWORD_DBROOT=... SERVICE_PASSWORD_64_APPKEY=... PANTEEN_APP_URL=https://โดเมน docker compose up -d`
+- ตรวจสถานะได้ที่ `/healthz` และงานตามเวลา (`cli/cron.php`) รันในคอนเทนเนอร์ทุก 10 นาที
+
 ## 3. บัญชีทดลอง
 
 | บทบาท | อีเมล | รหัสผ่าน |
