@@ -120,6 +120,19 @@ app/routes.php        113 routes, each with its middleware
 
 Links detect the sub-folder by themselves. The root `.htaccess` routes every request into `public/` and blocks `app/`, `config/`, `storage/`, `database/` and `tests/`.
 
+### XAMPP (macOS)
+
+Tested with XAMPP 8.2.4 (PHP 8.2, MariaDB 10.4) on Apple silicon, where it runs under Rosetta.
+
+```bash
+# after copying the folder to /Applications/XAMPP/htdocs/panteen-rent
+cd /Applications/XAMPP/htdocs/panteen-rent
+chmod -R a+rX . && chmod -R 777 storage public/media   # Apache runs as "daemon"; without this you get 403
+/Applications/XAMPP/bin/php cli/install.php
+```
+
+Start Apache and MySQL under *Manage Servers* in `manager-osx`, then open http://localhost/panteen-rent/. If Apache hangs on start, something else holds port 80 or 443 (Tailscale Serve, Docker and so on). XAMPP checks 443 because HTTPS is on, and `mv /Applications/XAMPP/etc/xampp/startssl /Applications/XAMPP/etc/xampp/startssl.off` turns it off. The Thai guide (section 13.2.1–13.2.2) has screenshots, including phpMyAdmin.
+
 ### Anywhere else
 
 ```bash

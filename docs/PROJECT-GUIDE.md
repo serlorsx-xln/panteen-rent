@@ -1047,7 +1047,10 @@ erDiagram
     bookings ||--o{ booking_events : "ประวัติ"
     bookings ||--o{ appointments : "นัดรับ/คืน"
     damage_types ||--o{ damage_items : "ราคามาตรฐาน"
+    users |o--o{ bookings : "พนักงานที่ลงรายการ (created_by)"
 ```
+
+อีก 4 ตารางไม่มีความสัมพันธ์กับตารางอื่น (ใช้เป็นข้อมูลระบบ): `login_attempts`, `mail_outbox`, `settings`, `counters`
 
 ### 12.2 ตารางทั้งหมด 21 ตาราง
 
@@ -1078,6 +1081,94 @@ erDiagram
 | `counters` | ตัวนับเลขเอกสาร | name, year, value |
 
 ไฟล์ที่เกี่ยวข้อง: `database/schema.sql` (โครงสร้างล้วน) และ `database/panteen_rent.sql` (โครงสร้าง + ข้อมูลตัวอย่าง สำหรับนำเข้าผ่าน phpMyAdmin)
+
+### 12.3 แบ่งตารางเป็น 4 กลุ่ม
+
+| กลุ่ม | ตาราง | หน้าที่ |
+|---|---|---|
+| ผู้ใช้ | `users`, `email_tokens`, `login_attempts`, `addresses`, `favorites`, `notifications` | บัญชี การยืนยันตัวตน ที่อยู่ ชุดที่ชอบ กระดิ่ง |
+| สินค้า | `categories`, `costumes`, `costume_images`, `damage_types` | หมวด ชุด รูป และราคาค่าเสียหายมาตรฐาน |
+| การจองและเงิน | `bookings` (ตารางหลัก), `payments`, `receipts`, `shipments`, `booking_photos`, `damage_items`, `booking_events`, `appointments` | ทุกอย่างที่เกิดกับการจองหนึ่งรายการ |
+| ระบบ | `settings`, `counters`, `mail_outbox` | ค่าตั้งร้าน ตัวนับเลขเอกสาร สำเนาอีเมล |
+
+ทุกตารางใช้ InnoDB (รองรับ foreign key และ transaction) และ utf8mb4 (เก็บภาษาไทยและอีโมจิได้)
+
+### 12.4 คีย์หลักและคีย์นอก (Primary key / Foreign key)
+
+**คีย์หลัก**: ทุกตารางใช้ `id` เลขอัตโนมัติ ยกเว้น 3 ตาราง
+
+| ตาราง | คีย์หลัก | เหตุผล |
+|---|---|---|
+| `favorites` | (`user_id`, `costume_id`) คีย์ผสม | คนหนึ่งกดชอบชุดเดียวกันได้ครั้งเดียว ฐานข้อมูลกันซ้ำให้เอง |
+| `settings` | `key` | ค่าตั้งร้านแบบ ชื่อ → ค่า เพิ่มค่าใหม่ได้โดยไม่ต้องแก้โครงสร้างตาราง |
+| `counters` | (`name`, `year`) คีย์ผสม | เลขเอกสารนับใหม่ทุกปี เช่น ใบจองปี 2026 กับ 2027 นับแยกกัน |
+
+**คีย์นอกทั้ง 19 ตัว** แยกตามสิ่งที่เกิดเมื่อลบแถวแม่
+
+| เมื่อลบแถวแม่ | คีย์นอก | ความหมาย |
+|---|---|---|
+| **ลบตามไปด้วย** (`ON DELETE CASCADE`) | `email_tokens`, `addresses`, `favorites`, `notifications`, `appointments.user_id` → `users` · `costume_images`, `favorites` → `costumes` · `payments`, `receipts`, `shipments`, `booking_photos`, `damage_items`, `booking_events`, `appointments.booking_id` → `bookings` | ข้อมูลลูกไม่มีความหมายถ้าไม่มีแม่ เช่น รูปของชุดที่ถูกลบ |
+| **ห้ามลบ** (ค่าเริ่มต้น RESTRICT) | `bookings.user_id` → `users` · `bookings.costume_id` → `costumes` · `costumes.category_id` → `categories` | ลบลูกค้าหรือชุดที่เคยถูกจองไม่ได้ ประวัติเงินจึงไม่หาย และลบหมวดที่ยังมีชุดอยู่ไม่ได้ ในหลังร้านจึงใช้วิธีเปลี่ยนสถานะแทนการลบ: ระงับบัญชีลูกค้า (`suspended`), เลิกให้เช่าชุด (`retired`), ปิดการแสดงหมวด |
+| **ตั้งเป็นว่าง** (`ON DELETE SET NULL`) | `bookings.created_by` → `users` · `damage_items.damage_type_id` → `damage_types` | ลบพนักงานหรือรายการค่าเสียหายมาตรฐานได้ การจองและค่าเสียหายที่คิดไปแล้วยังอยู่ครบ |
+
+`costumes.category_id` ยังมี `ON UPDATE CASCADE` ถ้าเลข id ของหมวดเปลี่ยน ชุดจะตามไปเอง
+ส่วน `payments.reviewed_by` และ `booking_events.actor_id` เก็บ id ของพนักงานไว้โดยไม่ผูกคีย์นอก ประวัติจึงไม่ขัดขวางการลบบัญชีพนักงาน
+
+### 12.5 ดัชนี (Index) และค่าที่ห้ามซ้ำ (Unique)
+
+| ประเภท | ดัชนี | ใช้กับงานอะไร |
+|---|---|---|
+| ห้ามซ้ำ | `users.email`, `categories.slug`, `categories.name`, `costumes.code`, `bookings.booking_no`, `receipts.receipt_no`, `damage_types.name`, `email_tokens.token_hash` | กันข้อมูลซ้ำที่ระดับฐานข้อมูล ไม่พึ่งโค้ดอย่างเดียว |
+| ห้ามซ้ำ (คีย์ผสม) | `receipts (booking_id, kind)` | การจองหนึ่งมีใบเสร็จแต่ละประเภทได้ใบเดียว |
+| ห้ามซ้ำ | `notifications.dedupe_key` | กันแจ้งเตือนเรื่องเดียวกันซ้ำ เช่น cron รันสองรอบ |
+| ค้นหาเร็ว | `bookings (costume_id, status, block_from, block_until)` | **ดัชนีที่สำคัญที่สุด** ใช้เช็กว่าชุดว่างในช่วงวันที่เลือกไหม |
+| ค้นหาเร็ว | `bookings (status, ship_by_date)`, `bookings (pickup_date)`, `bookings (return_date)` | รายการที่ต้องส่งวันนี้ / รับวันนี้ / คืนวันนี้ ในหลังร้าน |
+| ค้นหาเร็ว | `login_attempts (email, created_at)`, `(ip, created_at)` | นับการเดารหัสผ่านผิดใน 15 นาทีล่าสุด (เกินกำหนดจะล็อก 15 นาที) |
+| ค้นหาเร็ว | ดัชนีที่ขึ้นต้นด้วย `booking_id` ในตารางลูกทุกตาราง | เปิดหน้ารายละเอียดการจองแล้วดึงเงิน พัสดุ รูป ประวัติ ได้เร็ว |
+
+### 12.6 การทำ Normalization และจุดที่ตั้งใจเก็บซ้ำ
+
+โครงสร้างแยกข้อมูลตามหลัก normalization: ข้อมูลที่ซ้ำได้หลายแถวแยกเป็นตารางลูก (รูปชุด ที่อยู่ การชำระเงิน พัสดุ)
+และอ้างถึงกันด้วยคีย์นอก ไม่เก็บรายการซ้ำในคอลัมน์เดียว
+
+มีบางจุดที่ **ตั้งใจเก็บซ้ำ** (denormalize) เพราะเป็นเอกสารทางเงิน ต้องคงค่าตามวันที่เกิดรายการ
+
+| จุดที่เก็บซ้ำ | ทำไม |
+|---|---|
+| ราคา มัดจำ ค่าส่ง ยอดรวม ใน `bookings` (คัดลอกจาก `costumes`/ค่าตั้งร้าน) | ร้านขึ้นราคาชุดทีหลัง การจองเก่าต้องยังเป็นราคาเดิม |
+| ที่อยู่จัดส่ง `ship_*` ใน `bookings` (คัดลอกจาก `addresses`) | ลูกค้าแก้หรือลบที่อยู่ในสมุดทีหลัง พัสดุที่ส่งไปแล้วต้องยังรู้ว่าส่งไปที่ไหน |
+| `receipts.items_json` | ใบเสร็จต้องพิมพ์ซ้ำได้เหมือนเดิมทุกตัวอักษร |
+| `inspection_json` ใน `bookings` | ผลตรวจสภาพตอนรับคืนเป็นชุดข้อมูลที่ดูทั้งก้อน ไม่ได้ค้นทีละช่อง |
+
+เงินทุกช่องใช้ `DECIMAL(10,2)` ไม่ใช้ `FLOAT` เพื่อไม่ให้เศษสตางค์คลาดเคลื่อน
+
+### 12.7 กันการจองซ้อน (สองคนจองชุดเดียวกันพร้อมกัน)
+
+ชุดหนึ่งไม่ว่างตั้งแต่ `block_from` (วันที่ชุดออกจากร้าน) ถึง `block_until` (วันคืน + วันขนส่งกลับ + วันซัก)
+การจองใหม่ช่วง *a*–*b* ชนกับการจองเดิมเมื่อ `block_from <= b AND block_until >= a`
+(นับเฉพาะการจองที่ยังมีผล เช่น `awaiting_verification`, `confirmed`, `shipped`, `picked_up`, `returning`, `returned`)
+
+ตอนบันทึกการจอง (`BookingService::create`)
+
+1. เปิด transaction
+2. `SELECT ... FROM costumes WHERE id = ? FOR UPDATE` ล็อกแถวของชุดนั้น คนที่สองต้องรอจนคนแรกเสร็จ
+3. เช็กการชนด้วยเงื่อนไขข้างบน ถ้าชนให้ยกเลิกพร้อมข้อความ “ชุดไม่ว่างในช่วงนี้”
+4. บันทึกการจองแล้ว commit
+
+ทดสอบแล้วใน `tests/unit.php` (ใช้ `tests/race.php`): ยิงจองชุดเดียวกันพร้อมกัน 6 process ได้สำเร็จ 1 รายการ อีก 5 รายการได้ข้อความว่าชุดไม่ว่าง
+
+### 12.8 คำถามที่อาจารย์มักถาม
+
+| คำถาม | คำตอบสั้น | ดูต่อ |
+|---|---|---|
+| ตารางหลักคืออะไร | `bookings` ตารางอื่นในกลุ่มการจองเป็นลูกของมันทั้งหมด | 12.1 |
+| ความสัมพันธ์แบบไหน | 1 ต่อหลาย (1:N) เกือบทั้งหมด ส่วน `favorites` เป็นตารางกลางของ หลายต่อหลาย (M:N) ระหว่าง `users` กับ `costumes` | 12.1, 12.4 |
+| ลบลูกค้าที่เคยจองได้ไหม | ไม่ได้ (RESTRICT) เพื่อรักษาประวัติเงิน | 12.4 |
+| ทำไมเก็บราคาซ้ำใน `bookings` | ราคาต้องคงตามวันที่จอง | 12.6 |
+| กันจองซ้อนยังไง | transaction + `SELECT ... FOR UPDATE` + เงื่อนไขช่วงวันซ้อนกัน | 12.7 |
+| สถานะการจองมีอะไรบ้าง | 9 สถานะ เก็บเป็น `ENUM` ใน `bookings.status` เปลี่ยนได้ตามลำดับที่กำหนดเท่านั้น | 4.2 และภาคผนวก ก |
+| เก็บรหัสผ่านยังไง | `password_hash` (bcrypt) ไม่เก็บรหัสจริง | ภาคผนวก ก `users` |
+| ดูโครงสร้างจริงได้ที่ไหน | `database/schema.sql` หรือ phpMyAdmin → `panteen_rent` → ตาราง → Structure → Relation view | 13.2.2 |
 
 ---
 
@@ -1112,6 +1203,69 @@ password = App Password 16 ตัว (Google Account → Security → 2-Step Ver
 
 - Windows Task Scheduler ทุก 15 นาที: `C:\xampp\php\php.exe C:\xampp\htdocs\panteen-rent\cli\cron.php`
 - Linux cron: `*/15 * * * * php /path/to/panteen-rent/cli/cron.php`
+
+#### 13.2.1 ติดตั้งบน XAMPP (macOS)
+
+ทดสอบแล้วกับ XAMPP 8.2.4 (PHP 8.2.4, MariaDB 10.4.28) บน Mac ชิป Apple: ผ่านเทสครบ 445/445 และเทสผ่านเบราว์เซอร์ 138/138
+
+1. ดาวน์โหลด **XAMPP for OS X** จาก https://www.apachefriends.org แล้วเปิดไฟล์ `.dmg` ดับเบิลคลิกตัวติดตั้ง
+   - ถ้า macOS บล็อกว่า “ไม่สามารถตรวจสอบผู้พัฒนาได้” ไปที่ System Settings → Privacy & Security → กด **Open Anyway**
+   - XAMPP for Mac เป็นโปรแกรมของชิป Intel บน Mac ชิป Apple เครื่องจะขอติดตั้ง Rosetta ให้กดติดตั้ง
+   - ใส่รหัสผ่านเครื่อง แล้วกด Next ไปจนจบ (ติดตั้งที่ `/Applications/XAMPP`)
+2. เปิด **XAMPP** (`/Applications/XAMPP/manager-osx.app`) → แท็บ **Manage Servers** → เลือก Apache Web Server กด **Start** และ MySQL Database กด **Start** รอจนขึ้น Running
+3. คัดลอกโฟลเดอร์โปรเจกต์ไปที่ `/Applications/XAMPP/htdocs/panteen-rent` แล้วเปิด Terminal เพื่อตั้งสิทธิ์ไฟล์
+   (Apache ของ XAMPP บน Mac รันในชื่อผู้ใช้ `daemon` ถ้าไม่ตั้งสิทธิ์จะเจอหน้า **403 Forbidden**
+   โดยเฉพาะเมื่อคัดลอกมาจากแฟลชไดรฟ์หรือฮาร์ดดิสก์ภายนอก)
+   ```bash
+   cd /Applications/XAMPP/htdocs/panteen-rent
+   chmod -R a+rX .
+   chmod -R 777 storage public/media
+   ```
+4. สร้างฐานข้อมูลพร้อมข้อมูลตัวอย่าง (ใช้ PHP ของ XAMPP) หรือใช้ phpMyAdmin → Import ตามข้อ 13.2 ก็ได้
+   ```bash
+   /Applications/XAMPP/bin/php cli/install.php
+   ```
+5. เปิด http://localhost/panteen-rent/ (หน้าของ XAMPP เองอยู่ที่ http://localhost/dashboard/)
+
+![หน้า XAMPP Dashboard หลังติดตั้งเสร็จ](images/42-xampp-dashboard.jpg)
+
+**ตั้งงานตามเวลาบน Mac** (ไม่บังคับ): `crontab -e` แล้วใส่
+`*/15 * * * * /Applications/XAMPP/bin/php /Applications/XAMPP/htdocs/panteen-rent/cli/cron.php`
+
+**ปัญหาที่เจอบ่อยบน Mac**
+
+| อาการ | สาเหตุ | วิธีแก้ |
+|---|---|---|
+| กด Start แล้วค้างที่ “Waiting for one or more servers to be running…” หรือ Apache ไม่ขึ้น | มีโปรแกรมอื่นใช้พอร์ต 80 หรือ 443 อยู่แล้ว เช่น Tailscale Serve, Docker, เว็บเซิร์ฟเวอร์อื่น (XAMPP เช็กพอร์ต 443 ด้วยเพราะเปิด HTTPS ไว้) | ดูว่าใครใช้พอร์ต: `netstat -an \| grep LISTEN \| grep -E '\.(80\|443) '` ถ้าเป็นพอร์ต 443 และไม่ต้องใช้ HTTPS ในเครื่อง ให้ปิด HTTPS ของ XAMPP: `mv /Applications/XAMPP/etc/xampp/startssl /Applications/XAMPP/etc/xampp/startssl.off` แล้วกด Start ใหม่ (ถ้าจะเปิดกลับให้เปลี่ยนชื่อคืน) |
+| MySQL ไม่ขึ้น | มี MySQL ตัวอื่นใช้พอร์ต 3306 (เช่นติดตั้งผ่าน Homebrew) | ปิดตัวนั้นก่อน เช่น `brew services stop mysql` หรือ `mysql.server stop` |
+| เปิดเว็บแล้วขึ้น 403 Forbidden | Apache อ่านไฟล์ไม่ได้ | ทำข้อ 3 (`chmod`) |
+| อัปโหลดสลิปหรือรูปไม่ได้ | โฟลเดอร์ `storage` หรือ `public/media` เขียนไม่ได้ | `chmod -R 777 storage public/media` |
+
+#### 13.2.2 ดูและแก้ข้อมูลด้วย phpMyAdmin
+
+เปิด http://localhost/phpmyadmin/ (XAMPP ตั้งให้เข้าเป็น root ได้เลยโดยไม่ต้องใส่รหัส) แล้วคลิก `panteen_rent` ที่แถบซ้าย
+
+| อยากทำอะไร | กดตรงไหน |
+|---|---|
+| ดูรายชื่อตารางทั้ง 21 ตาราง จำนวนแถว และขนาด | คลิก `panteen_rent` → แท็บ **Structure** |
+| ดูข้อมูลในตาราง | คลิกชื่อตาราง → แท็บ **Browse** |
+| ดูคอลัมน์ ชนิดข้อมูล คีย์หลัก และดัชนี | คลิกชื่อตาราง → แท็บ **Structure** |
+| ดูคีย์นอก (ตารางนี้ชี้ไปตารางไหน ลบแล้วเกิดอะไร) | คลิกชื่อตาราง → **Structure** → **Relation view** |
+| ค้นหาข้อมูล | คลิกชื่อตาราง → แท็บ **Search** |
+| รันคำสั่ง SQL เอง | แท็บ **SQL** |
+| สำรองข้อมูล | คลิก `panteen_rent` → แท็บ **Export** → Go (ได้ไฟล์ `.sql`) |
+| นำเข้าข้อมูล | แท็บ **Import** → เลือกไฟล์ `.sql` → Import |
+
+![phpMyAdmin: ตารางทั้ง 21 ตารางในฐาน panteen_rent](images/43-phpmyadmin-tables.jpg)
+
+![phpMyAdmin: แท็บ Browse ของตาราง costumes](images/44-phpmyadmin-browse.jpg)
+
+![phpMyAdmin: แท็บ Structure ของตาราง bookings](images/45-phpmyadmin-structure.jpg)
+
+![phpMyAdmin: Relation view ของตาราง bookings แสดงคีย์นอกทั้ง 3 ตัวพร้อม ON DELETE](images/46-phpmyadmin-relations.jpg)
+
+⚠️ แก้ข้อมูลใน phpMyAdmin โดยตรงจะข้ามกฎของระบบ เช่น เปลี่ยนสถานะการจองโดยไม่ผ่านขั้นตอน ไม่มีประวัติ ไม่มีใบเสร็จ
+งานประจำวันให้ทำผ่านหลังร้าน ใช้ phpMyAdmin สำหรับดู ตรวจสอบ และสำรองข้อมูล
 
 ### 13.3 ไฟล์ตั้งค่า `config/config.php`
 
@@ -1161,6 +1315,17 @@ password = App Password 16 ตัว (Google Account → Security → 2-Step Ver
 - **แบบสองคอนเทนเนอร์** (`docker-compose.yml`): service `web` + `db` (MariaDB 10.11) ข้อมูลฐานข้อมูล สลิป รูปสภาพ และรูปชุดเก็บใน volume
   ไม่หายเมื่อ deploy ใหม่ รหัสผ่านฐานข้อมูลและ app key ใช้ตัวแปร `SERVICE_PASSWORD_*` (Coolify สุ่มให้เองเมื่อสร้างแบบ Docker Compose; repo ไม่มีรหัสลับ)
 - รันเองด้วย Docker: `SERVICE_PASSWORD_DB=... SERVICE_PASSWORD_DBROOT=... SERVICE_PASSWORD_64_APPKEY=... PANTEEN_APP_URL=https://โดเมน docker compose up -d`
+
+**ดูแลเว็บจริงบน Coolify (แบบคอนเทนเนอร์เดียว)**
+
+- **เก็บข้อมูลไม่ให้หายเมื่อ deploy ใหม่**: Coolify → แอป → **Persistent Storage** → **+ Add** → Volume Mount เพิ่ม 3 รายการ
+  `/var/lib/mysql`, `/var/www/panteen/storage`, `/var/www/panteen/public/media` แล้วกด Redeploy
+  (ข้อมูลที่อยู่ก่อนเพิ่ม volume จะเริ่มใหม่เป็นข้อมูลตัวอย่างหนึ่งครั้ง)
+- **เข้าดูฐานข้อมูล**: เว็บจริงไม่มี phpMyAdmin และฐานข้อมูลรับการเชื่อมต่อจากในคอนเทนเนอร์เท่านั้น
+  ใช้ Coolify → แอป → **Terminal** แล้วพิมพ์ `mariadb panteen_rent` จากนั้นใช้คำสั่ง SQL ได้ เช่น `SHOW TABLES;`, `SELECT booking_no, status FROM bookings LIMIT 10;`
+- **สำรองฐานข้อมูล**: ใน Terminal เดียวกัน `mariadb-dump panteen_rent > /var/www/panteen/storage/backup.sql`
+  (ไฟล์อยู่ใน volume ของ `storage` จึงไม่หายเมื่อ deploy ใหม่) แล้วนำไปเปิดดูหรือนำเข้า phpMyAdmin ในเครื่องได้
+- **รหัสผ่านฐานข้อมูลและ app key** ที่ระบบสุ่มให้อยู่ใน `/var/lib/mysql/panteen-secrets.env` ไม่ต้องแก้เอง
 
 ---
 
